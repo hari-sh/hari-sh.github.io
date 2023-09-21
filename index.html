@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html>
+<body>
+    <script>
+        const loadUrl = (loader) => {
+            return new Promise((resolve, reject) => {
+                try {
+                    const htag = document.createElement(loader.tag);
+                    htag.async = true;
+                    if (loader.tag == "link") {
+                        htag.rel = loader.rel;
+                        htag.href = loader.fileurl;
+                    }
+                    else if (loader.tag == "script") {
+                        htag.type = loader.type;
+                        htag.src = loader.fileurl;
+                    }
+
+                    htag.addEventListener("load", (ev) => {
+                        resolve({ status: true });
+                    });
+
+                    htag.addEventListener("error", (ev) => {
+                        reject({
+                            status: false,
+                            message: `Failed to load the script {FILE_URL}`
+                        });
+                    });
+                    if (loader.tag == "link") {
+                        document.head.appendChild(htag);
+                    }
+                    else if (loader.tag == "script") {
+                        document.body.appendChild(htag);
+                    }
+                } catch (error) {
+                    reject(error);
+                }
+            });
+        };
+
+        const loadUrlUtil = (urls, ind) => {
+            if (ind < urls.length) {
+                loadUrl(urls[ind]).then(data => {
+                    console.log(urls[ind].fileurl + " loaded successfully", data);
+                    loadUrlUtil(urls, ind + 1);
+                });
+            }
+        }
+
+        const urls = [
+            {
+                fileurl: 'https://cdn.jsdelivr.net/gh/hari-sh/rollup_template/app/style.css',
+                tag: 'link',
+                rel: 'stylesheet'
+            },
+            {
+                fileurl: 'https://d3js.org/d3.v3.min.js',
+                type: "text/javascript",
+                tag: 'script'
+            },
+            {
+                fileurl: 'https://cdn.jsdelivr.net/gh/hari-sh/rollup_template/app/dist/plt.js',
+                type: "text/javascript",
+                tag: 'script'
+            }
+        ];
+
+        loadUrlUtil(urls, 0);
+    </script>
+</body>
+
+</html>
