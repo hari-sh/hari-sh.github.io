@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>D3 Signal Plot Workspace</title>
+<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<style>
+  :root {
+    --bg: #1e1e1e;
+    --panel: #252526;
+    --panel-hover: #2a2d2e;
+    --border: #3a3a3a;
+    --text: #cccccc;
+    --muted: #858585;
+    --accent: #007acc;
+    --plot-bg: #1e1e1e;
+    --grid: #333333;
+    --axis: #777777;
+    --line: #4fc3f7;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+
+  .app {
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+  }
+
+  /* Left vertical tab bar */
+  .sidebar {
+    width: 180px;
+    min-width: 80px;
+    height: 100%;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background: var(--panel);
+    border-right: 1px solid #2b2b2b;
+    padding: 4px 0;
+  }
+
+  .sidebar-resizer {
+    position: absolute;
+    top: 0;
+    right: -3px;
+    width: 3px;
+    height: 100%;
+    cursor: col-resize;
+    z-index: 10;
+  }
+
+  .sidebar-resizer:hover,
+  .sidebar-resizer.dragging {
+    background: var(--accent);
+    opacity: 0.55;
+  }
+
+  .tabs {
+    width: 100%;
+    flex: 1;
+    overflow-y: auto;
+    scrollbar-width: none;
+  }
+
+  .tabs::-webkit-scrollbar { display: none; }
+
+  .tab {
+    position: relative;
+    width: 100%;
+    min-height: 42px;
+    padding: 0 20px 0 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--muted);
+    cursor: pointer;
+    user-select: none;
+    border-bottom: 1px solid #292929;
+    transition: background 0.12s, color 0.12s;
+  }
+
+  .tab:hover {
+    background: var(--panel-hover);
+    color: var(--text);
+  }
+
+  .tab.active {
+    color: #ffffff;
+    background: #303031;
+  }
+
+  .tab.active::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: var(--accent);
+  }
+
+  .tab-label {
+    font-size: 11px;
+    letter-spacing: 0.2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+  }
+
+  .close-tab {
+    position: absolute;
+    right: 4px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 16px;
+    height: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: 3px;
+    background: transparent;
+    color: var(--muted);
+    font-size: 14px;
+    line-height: 1;
+    opacity: 0;
+    cursor: pointer;
+    transition: opacity 0.12s, background 0.12s, color 0.12s;
+  }
+
+  .tab:hover .close-tab {
+    opacity: 1;
+  }
+
+  .close-tab:hover {
+    background: #444444;
+    color: #ffffff;
+  }
+
+  .add-tab {
+    width: 34px;
+    height: 34px;
+    margin-top: 6px;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    background: transparent;
+    color: var(--muted);
+    font-size: 22px;
+    line-height: 1;
+    cursor: pointer;
+  }
+
+  .add-tab:hover {
+    color: white;
+    background: var(--panel-hover);
+    border-color: #555;
+  }
+
+  /* Plot area */
+  .workspace {
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .toolbar {
+    height: 36px;
+    min-height: 36px;
+    display: flex;
+    align-items: center;
+    padding: 0 14px;
+    border-bottom: 1px solid #2b2b2b;
+    background: var(--panel);
+    font-size: 12px;
+  }
+
+  .plot-title {
+    font-weight: 500;
+  }
+
+  .hint {
+    margin-left: auto;
+    color: var(--muted);
+  }
+
+  .plot-container {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    background: var(--plot-bg);
+  }
+
+  svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+
+  .grid line {
+    stroke: var(--grid);
+    stroke-opacity: 0.8;
+    shape-rendering: crispEdges;
+  }
+
+  .grid path {
+    display: none;
+  }
+
+  .axis path,
+  .axis line {
+    stroke: var(--axis);
+  }
+
+  .axis text {
+    fill: var(--muted);
+    font-size: 11px;
+  }
+
+  .signal {
+    fill: none;
+    stroke: var(--line);
+    stroke-width: 2;
+    vector-effect: non-scaling-stroke;
+  }
+
+  .zoom-overlay {
+    fill: transparent;
+    cursor: grab;
+  }
+
+  .zoom-overlay:active {
+    cursor: grabbing;
+  }
+</style>
+</head>
+
+<body>
+<div class="app">
+  <aside id="sidebar" class="sidebar">
+    <div id="sidebarResizer" class="sidebar-resizer" title="Drag to resize"></div>
+    <div id="tabs" class="tabs"></div>
+    <button id="addTab" class="add-tab" title="New plot">+</button>
+  </aside>
+
+  <main class="workspace">
+    <div class="toolbar">
+      <span id="plotTitle" class="plot-title"></span>
+      <span class="hint">Drag to pan · Scroll to zoom</span>
+    </div>
+    <div id="plotContainer" class="plot-container"></div>
+  </main>
+</div>
+
+<script>
+const plots = [];
+let activePlotId = null;
+
+const titleWords = [
+  "signal", "wave", "trace", "channel", "spectrum",
+  "sample", "capture", "noise", "power", "frequency",
+  "amplitude", "phase", "rf", "data", "test"
+];
+
+function randomWord() {
+  return titleWords[Math.floor(Math.random() * titleWords.length)];
+}
+
+function randomTitle() {
+  return `${randomWord()}_${randomWord()}_${randomWord()}`;
+}
+
+const sidebarEl = document.getElementById("sidebar");
+const sidebarResizerEl = document.getElementById("sidebarResizer");
+const tabsEl = document.getElementById("tabs");
+const addTabEl = document.getElementById("addTab");
+const plotTitleEl = document.getElementById("plotTitle");
+const plotContainerEl = document.getElementById("plotContainer");
+
+function randomData(count = 300) {
+  let y = 0;
+
+  return d3.range(count).map(x => {
+    y += (Math.random() - 0.5) * 1.2;
+
+    return {
+      x,
+      y: y + Math.sin(x * 0.08) * 2
+    };
+  });
+}
+
+function createPlot() {
+  const plot = {
+    id: crypto.randomUUID(),
+    name: randomTitle(),
+    data: randomData(),
+    zoomTransform: d3.zoomIdentity
+  };
+
+  plots.push(plot);
+  selectPlot(plot.id);
+}
+
+function selectPlot(id) {
+  activePlotId = id;
+  renderTabs();
+  renderPlot();
+}
+
+function closePlot(id) {
+  const index = plots.findIndex(p => p.id === id);
+  if (index === -1) return;
+
+  plots.splice(index, 1);
+
+  if (plots.length === 0) {
+    activePlotId = null;
+    plotTitleEl.textContent = "";
+    plotContainerEl.innerHTML = "";
+    renderTabs();
+    return;
+  }
+
+  if (activePlotId === id) {
+    const nextIndex = Math.min(index, plots.length - 1);
+    activePlotId = plots[nextIndex].id;
+  }
+
+  renderTabs();
+  renderPlot();
+}
+
+function renderTabs() {
+  tabsEl.innerHTML = "";
+
+  for (const plot of plots) {
+    const tab = document.createElement("div");
+    tab.className = "tab" + (plot.id === activePlotId ? " active" : "");
+    tab.title = plot.name;
+
+    const label = document.createElement("span");
+    label.className = "tab-label";
+    label.textContent = plot.name;
+
+    const close = document.createElement("button");
+    close.className = "close-tab";
+    close.type = "button";
+    close.title = "Close plot";
+    close.textContent = "×";
+
+    close.addEventListener("click", event => {
+      event.stopPropagation();
+      closePlot(plot.id);
+    });
+
+    tab.appendChild(label);
+    tab.appendChild(close);
+    tab.addEventListener("click", () => selectPlot(plot.id));
+    tabsEl.appendChild(tab);
+  }
+}
+
+function renderPlot() {
+  const plot = plots.find(p => p.id === activePlotId);
+  if (!plot) return;
+
+  plotTitleEl.textContent = plot.name;
+  plotContainerEl.innerHTML = "";
+
+  const rect = plotContainerEl.getBoundingClientRect();
+  const width = Math.max(300, rect.width);
+  const height = Math.max(250, rect.height);
+
+  const margin = {
+    top: 20,
+    right: 25,
+    bottom: 42,
+    left: 55
+  };
+
+  const innerWidth = width - margin.left - margin.right;
+  const innerHeight = height - margin.top - margin.bottom;
+
+  const svg = d3.select(plotContainerEl)
+    .append("svg")
+    .attr("viewBox", `0 0 ${width} ${height}`)
+    .attr("preserveAspectRatio", "none");
+
+  const root = svg.append("g")
+    .attr("transform", `translate(${margin.left},${margin.top})`);
+
+  const x = d3.scaleLinear()
+    .domain(d3.extent(plot.data, d => d.x))
+    .range([0, innerWidth]);
+
+  const y = d3.scaleLinear()
+    .domain(d3.extent(plot.data, d => d.y))
+    .nice()
+    .range([innerHeight, 0]);
+
+  const xAxis = root.append("g")
+    .attr("class", "axis")
+    .attr("transform", `translate(0,${innerHeight})`);
+
+  const yAxis = root.append("g")
+    .attr("class", "axis");
+
+  const xGrid = root.append("g")
+    .attr("class", "grid")
+    .attr("transform", `translate(0,${innerHeight})`);
+
+  const yGrid = root.append("g")
+    .attr("class", "grid");
+
+  const line = d3.line()
+    .x(d => x(d.x))
+    .y(d => y(d.y));
+
+  const path = root.append("path")
+    .datum(plot.data)
+    .attr("class", "signal");
+
+  function update(transform) {
+    const zx = transform.rescaleX(x);
+    const zy = transform.rescaleY(y);
+
+    xAxis.call(d3.axisBottom(zx).ticks(8));
+    yAxis.call(d3.axisLeft(zy).ticks(7));
+
+    xGrid.call(
+      d3.axisBottom(zx)
+        .ticks(8)
+        .tickSize(-innerHeight)
+        .tickFormat("")
+    );
+
+    yGrid.call(
+      d3.axisLeft(zy)
+        .ticks(7)
+        .tickSize(-innerWidth)
+        .tickFormat("")
+    );
+
+    path.attr(
+      "d",
+      d3.line()
+        .x(d => zx(d.x))
+        .y(d => zy(d.y))
+    );
+  }
+
+  const zoom = d3.zoom()
+    .scaleExtent([0.5, 40])
+    .on("zoom", event => {
+      plot.zoomTransform = event.transform;
+      update(event.transform);
+    });
+
+  svg.call(zoom);
+
+  // Restore this plot's previous zoom/pan state.
+  svg.call(zoom.transform, plot.zoomTransform);
+
+  // Keep the plot usable when the window is resized.
+  // Re-rendering preserves plot.zoomTransform.
+}
+
+function getContentMaxWidth() {
+  const labels = [...tabsEl.querySelectorAll(".tab-label")];
+
+  if (labels.length === 0) {
+    return 180;
+  }
+
+  // Measure the widest title without allowing the close icon to overlap it.
+  const widest = Math.max(
+    ...labels.map(label => {
+      const clone = label.cloneNode(true);
+      clone.style.position = "absolute";
+      clone.style.visibility = "hidden";
+      clone.style.width = "max-content";
+      clone.style.maxWidth = "none";
+      document.body.appendChild(clone);
+      const width = clone.getBoundingClientRect().width;
+      clone.remove();
+      return width;
+    })
+  );
+
+  // Text + left/right padding + close icon + resize handle.
+  return Math.max(180, Math.ceil(widest + 52));
+}
+
+let resizing = false;
+
+sidebarResizerEl.addEventListener("pointerdown", event => {
+  resizing = true;
+  sidebarResizerEl.classList.add("dragging");
+  sidebarResizerEl.setPointerCapture(event.pointerId);
+  document.body.style.cursor = "col-resize";
+  document.body.style.userSelect = "none";
+});
+
+sidebarResizerEl.addEventListener("pointermove", event => {
+  if (!resizing) return;
+
+  const maxWidth = getContentMaxWidth();
+  const newWidth = Math.max(80, Math.min(maxWidth, event.clientX));
+  sidebarEl.style.width = `${newWidth}px`;
+});
+
+sidebarResizerEl.addEventListener("pointerup", event => {
+  resizing = false;
+  sidebarResizerEl.classList.remove("dragging");
+  document.body.style.cursor = "";
+  document.body.style.userSelect = "";
+  sidebarResizerEl.releasePointerCapture(event.pointerId);
+});
+
+sidebarResizerEl.addEventListener("pointercancel", () => {
+  resizing = false;
+  sidebarResizerEl.classList.remove("dragging");
+  document.body.style.cursor = "";
+  document.body.style.userSelect = "";
+});
+
+addTabEl.addEventListener("click", createPlot);
+
+window.addEventListener("resize", () => {
+  if (activePlotId) renderPlot();
+});
+
+// Start with one plot.
+createPlot();
+</script>
+</body>
+</html>
